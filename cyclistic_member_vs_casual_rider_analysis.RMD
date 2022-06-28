@@ -1,0 +1,472 @@
+---
+title: "Cyclistic Member vs Casual Rider Analysis"
+author: "John Judge"
+date: '2022-06-24'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+## Identify how member and casual riders use cycles differently
+
+## Give credit where credit is due:
+This script follows the [Divvy Exercise R Script.](https://docs.google.com/document/d/1TTj5KNKf4BWvEORGm10oNbpwTRk1hamsWJGj6qRWpuI/edit)
+
+It is NOT strictly copy/paste, but without the help provided by that script, I wouldn't have been able to do some of what's below.
+
+## Load Libraries And Set Working Directory
+
+```{r Load Libraries}
+library("tidyverse")
+library("lubridate")
+library("anytime")
+library("ggplot2")
+```
+
+```{r Set Working Directory}
+setwd("C:/Users/jj/Documents/Google Data Analytics Cert/capstone project/Cyclistic Member vs Casual Rider Analysis")
+```
+
+## Set Up Data Frame
+
+Read in Data From Separate Files
+
+```{r }
+data_202205 <- read.csv('202205-divvy-tripdata.csv')
+data_202204 <- read.csv('202204-divvy-tripdata.csv')
+data_202203 <- read.csv('202203-divvy-tripdata.csv')
+data_202202 <- read.csv('202202-divvy-tripdata.csv')
+data_202201 <- read.csv('202201-divvy-tripdata.csv')
+data_202112 <- read.csv('202112-divvy-tripdata.csv')
+data_202111 <- read.csv('202111-divvy-tripdata.csv')
+data_202110 <- read.csv('202110-divvy-tripdata.csv')
+data_202109 <- read.csv('202109-divvy-tripdata.csv')
+data_202108 <- read.csv('202108-divvy-tripdata.csv')
+data_202107 <- read.csv('202107-divvy-tripdata.csv')
+data_202106 <- read.csv('202106-divvy-tripdata.csv')
+```
+
+Output Column Names For Each File To Ensure They are all the Same
+```{r }
+colnames(data_202205)
+colnames(data_202204)
+colnames(data_202203)
+colnames(data_202202)
+colnames(data_202201)
+colnames(data_202112)
+colnames(data_202111)
+colnames(data_202110)
+colnames(data_202109)
+colnames(data_202108)
+colnames(data_202107)
+colnames(data_202106)
+```
+
+Combine Files Into Single Data Frame
+
+```{r }
+all_trips <- bind_rows(data_202205, data_202204, data_202203, data_202202, 
+                       data_202201, data_202112, data_202111, data_202110,
+                       data_202109, data_202108, data_202107, data_202106)
+```
+
+## Inspect Newly Created Data Frame
+
+check columns, number of rows, structure and data types
+
+```{r }
+colnames(all_trips)
+nrow(all_trips)
+head(all_trips)
+tail(all_trips)
+str(all_trips)
+summary(all_trips)
+```
+
+First attempt at view(all_trips) crashed RStudio!!!  No wonder, over 5M records :)
+
+Create a slice (output not included, eval set to FALSE)
+``` {r eval = FALSE}
+all_trips_v0.1 <- slice(all_trips, 1:100)
+view(all_trips_v0.1)
+```
+
+Inspect rideable_type and member_casual column values to ensure there are no slight variations in spelling/abbreviation throughout the dataset
+
+```{r results = 'asis'}
+unique(all_trips$rideable_type)
+unique(all_trips$member_casual)
+```
+
+Inspect start and end station names for slight variations create a list to view since theres over 1000 unique values
+Output not included, eval set to FALSE
+```{r eval = FALSE}
+start_station_names <- sort(unique(all_trips$start_station_name))
+end_station_names <- sort(unique(all_trips$end_station_name))
+view(start_station_names)
+view(end_station_names)
+```
+
+There's probably a better way to do that.  This requires scrolling and looking for slight variants.
+
+check ride_id column for duplicated IDs
+```{r }
+sum(duplicated(all_trips$ride_id))
+```
+
+## Add Fields to Enable Aggregating Data
+
+add date related fields
+```{r }
+all_trips$date <- anydate(all_trips$started_at)
+all_trips$day <- format(as.Date(all_trips$date), "%d")
+all_trips$weekday <- format(as.Date(all_trips$date), "%A")
+all_trips$month <- format(as.Date(all_trips$date), "%b")
+all_trips$ridelength <- difftime(anytime(all_trips$ended_at), anytime(all_trips$started_at), units = "min")
+```
+
+create and view a slice of the data frame
+Output not included, eval set to FALSE
+```{r eval = FALSE}
+all_trips_v1 <- slice(all_trips,1:100)
+view(all_trips_v1)
+```
+
+convert ridelength column to numeric to enable calcs
+
+```{r }
+all_trips$ridelength <- as.numeric(all_trips$ridelength)
+```
+
+Inspect min, max, median and mean for ridelength column
+
+```{r }
+summary(all_trips$ridelength)
+```
+
+## Create A New Data Frame To Enable Analysis Of Valid Values
+
+Exclude ride_length less than 1, since view() showed records with 0 mins and the summary() function showed min value is less than 0
+
+NOTE - 0 min ride lengths do NOT have the same start and stop times!!!
+
+ALSO - max value of 55944.15 (given a median of 11.13 and mean of 21.02) seems odd.  
+
+Arbitrarily sub-setting data at this point for rides greater than 1 day and 1 week for closer look
+
+### Create New Data Frames
+
+data frame for all non-negative values
+```{r }
+all_trips_v2 <- all_trips[!(all_trips$ridelength < 1),]
+```
+
+create new data frame to view trips longer than 1 week
+``` {r }
+all_trips_v3 <- all_trips[(all_trips$ridelength > 10080),]
+```
+
+create new data frame to view trips longer than 1 day
+``` {r }
+all_trips_v4 <- all_trips[(all_trips$ridelength > 1440),]
+```
+
+Review rides greater than a day and week
+Output not included, eval set to FALSE
+``` {r eval = FALSE}
+View(all_trips_v3)
+View(all_trips_v4)
+```
+
+## Descriptive Analysis
+
+Overall data set
+```{r  }
+summary(all_trips_v2$ridelength)
+sd(all_trips_v2$ridelength)
+hist(all_trips_v2$ridelength)
+```
+
+Max ride length of 55944.15 mins is troubling.  With only 4,338 rides greater than a day and 301 rides greater than a week, the mean is skewed slightly with these data points in the set.  Greater than a day seems like atypical riders, given there are 5M total records in the data set.
+
+Pare down the data set to rides that aren't greater than a day and not less than 0
+```{r }
+all_trips_v2.1 <- all_trips[!(all_trips$ridelength > 1440) & !(all_trips$ridelength < 1),]
+```
+
+Review distribution of pared down data set
+```{r }
+summary(all_trips_v2.1$ridelength)
+sd(all_trips_v2.1$ridelength)
+hist(all_trips_v2.1$ridelength)
+```
+
+Still a significant spread in the data, 3rd quartile is only about 21 mins and the max is 1440 mins.  There is an incredibly long right tail in the distribution
+
+## Calculate The Mild Outlier Thresholds
+### Determine a suitable upper bound and possibly show a different group of ride characteristics based on ride length
+
+Create a value so I can manually check the math the code is doing...
+```{r }
+ridelength_IQR <- IQR(all_trips_v2.1$ridelength)
+```
+
+Calculate lower and upper thresholds
+```{r }
+if(quantile(all_trips_v2.1$ridelength, probs = .25, na.rm = TRUE)-
+  (1.5 * IQR(all_trips_v2.1$ridelength)) < 0)
+  {
+  lower_threshold <- 0
+  }else {
+    lower_threshold <- quantile(all_trips_v2.1$ridelength, probs = .25, na.rm = TRUE)-
+      (1.5 * IQR(all_trips_v2.1$ridelength))
+  }
+
+upper_threshold <- quantile(all_trips_v2.1$ridelength, probs = .75, na.rm = TRUE) +
+  (1.5 * IQR(all_trips_v2.1$ridelength))
+```
+
+Create data frames for both sides of the upper threshold to enable separate reviews
+```{r }
+all_trips_v2.2 <- all_trips_v2.1[(all_trips_v2.1$ridelength < 42.5),]
+all_trips_v2.3 <- all_trips_v2.1[!(all_trips_v2.1$ridelength < 42.5),]
+```
+
+## Second Descriptive Analysis
+
+Compare mean median min and max for casual vs member riders first for overall data set
+```{r }
+aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual, FUN = mean)
+aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual, FUN = median)
+aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual, FUN = min)
+aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual, FUN = max)
+```
+
+Review rides by day of week, all rides
+
+I WILL have order!
+```{r }
+all_trips_v2.1$weekday <- ordered(all_trips_v2.1$weekday, 
+  levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual + all_trips_v2.1$weekday, FUN = mean)
+```
+
+Compare mean median max and min for data subset rides less than 42.5 mins
+```{r }
+
+aggregate(all_trips_v2.2$ridelength ~ all_trips_v2.2$member_casual, FUN = mean)
+aggregate(all_trips_v2.2$ridelength ~ all_trips_v2.2$member_casual, FUN = median)
+aggregate(all_trips_v2.2$ridelength ~ all_trips_v2.2$member_casual, FUN = min)
+aggregate(all_trips_v2.2$ridelength ~ all_trips_v2.2$member_casual, FUN = max)
+```
+
+Review rides by day of week rides less than 42.5 mins
+```{r }
+all_trips_v2.2$weekday <- ordered(all_trips_v2.2$weekday, 
+                                  levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+aggregate(all_trips_v2.2$ridelength ~ all_trips_v2.2$member_casual + all_trips_v2.2$weekday, FUN = mean)
+```
+
+Compare mean median max and min for data subset rides more than 42.5 mins
+```{r }
+aggregate(all_trips_v2.3$ridelength ~ all_trips_v2.3$member_casual, FUN = mean)
+aggregate(all_trips_v2.3$ridelength ~ all_trips_v2.3$member_casual, FUN = median)
+aggregate(all_trips_v2.3$ridelength ~ all_trips_v2.3$member_casual, FUN = min)
+aggregate(all_trips_v2.3$ridelength ~ all_trips_v2.3$member_casual, FUN = max)
+```
+
+Review rides by day of week rides more than 42.5 mins
+```{r }
+all_trips_v2.3$weekday <- ordered(all_trips_v2.3$weekday, 
+                                  levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+aggregate(all_trips_v2.3$ridelength ~ all_trips_v2.3$member_casual + all_trips_v2.3$weekday, FUN = mean)
+```
+
+## Create Plots And Visualize Data
+
+Number of rides by day and by member type
+```{r  echo = FALSE}
+all_trips_v2.1 %>% 
+  mutate(day_of_week = wday(anydate(started_at), label = TRUE)) %>% 
+  group_by(member_casual, day_of_week) %>% 
+  summarize(number_of_rides_v2.1 = n()) %>% 
+  arrange(member_casual, day_of_week)  %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides_v2.1, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Ride Count by Day of week
+  and Rider Type", subtitle = "All Rides")
+```
+
+average ride length by day and by member type
+``` {r echo = FALSE}
+all_trips_v2.1 %>%
+  mutate(day_of_week = wday(anydate(started_at), label = TRUE)) %>% 
+  group_by(member_casual, day_of_week) %>% 
+  summarize(average_duration_v2.1 = mean(ridelength)) %>% 
+  arrange(member_casual, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = average_duration_v2.1, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Average Ride Duration by Day of week
+  and Rider Type" ,subtitle = "All Rides")
+```
+
+Ride length by rideable type and member type
+``` {r echo = FALSE}
+all_trips_v2.1 %>%
+  mutate(rideable_type, label = TRUE) %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarize(average_duration_v2.1 = mean(ridelength)) %>% 
+  arrange(member_casual, rideable_type) %>% 
+  ggplot(aes(x = rideable_type, y = average_duration_v2.1, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Average Ride Duration by Rideable Type and Rider Type", 
+                                      subtitle = "All Rides")
+```
+
+Ride Count by Month and Rider Type
+``` {r echo = FALSE}
+all_trips_v2.1$month <- ordered(all_trips_v2.1$month, 
+   levels=c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+            "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+all_trips_v2.1 %>% 
+  mutate(month, label = TRUE) %>% 
+  group_by(member_casual, month) %>% 
+  summarize(number_of_rides_v2.1 = n()) %>% 
+  arrange(member_casual, month)  %>% 
+  ggplot(aes(x = month, y = number_of_rides_v2.1, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Ride Count by Month
+  and Rider Type", subtitle = "All Rides")
+```
+
+## Executive Summary
+
+**The question** - Identify how member and casual riders use cycles differently
+
+**The Timeframe Analyzed** - June 2021 - May 2022
+
+**Findings**
+
+* Casual riders use bikes for longer periods of time
+* Casual riders ride more than members on weekends
+* Casual riders use “docked” bikes, members do not
+* Casual Riders Use Bikes In Good Weather
+
+**Recommendations**
+
+* Identify repeat casual riders and/or demographics within this group
+  + Create a focus group to determine why they don’t become members
+* Aggregate data to enable a heat map of rides within the city
+  + How are rider types distributed throughout the city
+* Determine if there is an accessibility issue - identify an unmet need for casual riders
+  + Since casual riders use docked bikes, whereas members do not
+  + Casual riders ride longer - do they cover more distance or do they simply ride slower
+
+## Appendix
+
+### Rides can be as long as 55,944 mins
+
+For reference, that’s longer than a month, which seems odd to be renting a bike
+This led me down a path to find what drives riders to keep a bike for more than a day
+
+* I found the upper threshold of ride times, 42.5 minutes (anything above this time is an outlier)
+
+Number of rides by day and by member type (data set v2.2, rides less than 
+42.5 minutes, the upper threshold for outliers in the overall data set)
+``` {r echo = FALSE}
+all_trips_v2.2 %>% 
+  mutate(day_of_week = wday(anydate(started_at), label = TRUE)) %>% 
+  group_by(member_casual, day_of_week) %>% 
+  summarize(number_of_rides_v2.2 = n()) %>% 
+  arrange(member_casual, day_of_week)  %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides_v2.2, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Ride Count by Day of week
+  and Rider Type", subtitle = "v2.2 - Rides less than 42.5 mins")
+```
+
+Average ride length by day and by member type
+``` {r echo = FALSE}
+all_trips_v2.2 %>%
+  mutate(day_of_week = wday(anydate(started_at), label = TRUE)) %>% 
+  group_by(member_casual, day_of_week) %>% 
+  summarize(average_duration_v2.2 = mean(ridelength)) %>% 
+  arrange(member_casual, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = average_duration_v2.2, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Average Ride Duration by Day of week
+  and Rider Type" ,subtitle = "v2.2 - Rides less than 42.5 mins")
+```
+
+Number of rides by day and by member type (data set v2.3, rides more than 
+42.5 minutes, the upper threshold for outliers in the overall data set)
+``` {r echo = FALSE}
+all_trips_v2.3 %>% 
+  mutate(day_of_week = wday(anydate(started_at), label = TRUE)) %>% 
+  group_by(member_casual, day_of_week) %>% 
+  summarize(number_of_rides_v2.3 = n()) %>% 
+  arrange(member_casual, day_of_week)  %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides_v2.3, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Ride Count by Day of week
+  and Rider Type",subtitle = "v2.3 - Rides more than 42.5 mins")
+```
+
+Ride Count by Rideable Type and Member Type
+``` {r echo = FALSE}
+all_trips_v2.1 %>% 
+  mutate(rideable_type, label = TRUE) %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarize(number_of_rides_v2.1 = n()) %>% 
+  arrange(member_casual, rideable_type)  %>% 
+  ggplot(aes(x = rideable_type, y = number_of_rides_v2.1, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Cyclistic Ride Count by Rideable Type
+  and Rider Type", subtitle = "All Rides")
+```
+
+**Findings**
+
+* Rides below 42.5 minutes are predominantly members, riding during the week
+* Rides more than 42.5 minutes are predominantly casual, riding on weekends
+  + They pick the bikes up on a weekend day…
+* Rides more than 42.5 minutes average just above 90 minutes FOR BOTH GROUPS!
+  + Casual average duration for this subset is 95 mins
+  + Member average duration for this subset is 97 mins
+
+**Takeaways and New Questions**
+
+Takeaways
+
+* Casual riders exhibit member characteristics and vice versa, depending on ride length
+* Casual riders and members may use bikes for both commuting and recreation
+
+New Questions
+
+* Why haven’t certain casual riders become members?
+  + Especially those where ride length is “short,” which suggests they are commuting
+* Do members use bikes for commuting AND recreation???
+  + Are members more likely to turn in bikes and take a new one during the same day?
+  + Perhaps take a different bike for lunch break, etc, which would drive a longer ride length
+* Do casual riders hang onto bikes longer because there is an extra step for them to get a different one?
+
+
+
+
+
+
+## Create .csv files for visualizations in programs other than R
+Output not included, eval set to FALSE
+
+``` {r eval = FALSE}
+ridecounts_day_type <- aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual + all_trips_v2.1$weekday, FUN = length)
+write.csv(ridecounts_day_type, file = '~ride_count_day_type.csv')
+
+ridelengths_day_type <- aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual + all_trips_v2.1$weekday, FUN = mean)
+write.csv(ridelengths_day_type, file = '~avg_ride_length_day_type.csv')
+
+ridelengths_month_type <- aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual + all_trips_v2.1$month, FUN = mean)
+write.csv(ridelengths_month_type, file = '~ride_length_month_type.csv')
+
+ridelengths_rideable_type <- aggregate(all_trips_v2.1$ridelength ~ all_trips_v2.1$member_casual + all_trips_v2.1$rideable_type, FUN = mean)
+write.csv(ridelengths_rideable_type, file = '~ride_length_rideable_type.csv')
+```
+
